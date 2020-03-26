@@ -1,6 +1,25 @@
 function aucMap = gk_calc_AUC(dat,SHAMfolder,KORDfolder,R2_threshold,AUC_range,normtype)
+% USAGE: aucMap = gk_calc_AUC(dat,SHAMfolder,KORDfolder,R2_threshold,AUC_range,normtype)
+%
+% INFO: This function calculates tha Area Under the Curve (AUC) values for a
+%       specified range in the time course for the KORD experiments.
+%
+% INPUT:
+% - dat         : the structure returned by KORD_datapaths
+% - SHAMfolder  : the path to the folder with the SHAM data
+% - KORDfolder  : the path to the folder with the KORD DATA
+% - R2_threshold: franction (e.g. 0.95) only use the SHAM fits above this threshold
+% - AUC_range   : the volumes to use for calculation of the AUC
+% - normtype    : the pre created files to use (1 percent change, 2 zscore, 0 no norm)
+%
+% OUTPUT:
+% - aucMap      : a variable with the AUC map. It also saves a .mat file.
+% - NOTE: it will also create auc_XXX.nii files in the KORD directory per file.
+%
+% Author: GAK June 2019
 
-%dat=KORD_datapaths(fileparts(pwd),0); % this works if you are in the code directory
+
+
 if normtype==1
     adjstr='p_adj_';
 elseif normtype==2
@@ -50,13 +69,13 @@ for sc=1:N_kord
         mB=ones(N_kord,1);
     end
     mB_kLow_2Dall_goodfit(:,:,sc)=kLow_2Dall_goodfit(:,:,sc)-(mean_sham_fit_2D_goodfit.*repmat(mB(sc),1,120));
-    
+
     % Save niftis
     kord=zeros(info.ImageSize);
     kLow_2Dall(goodFitIndex,:,sc)=mB_kLow_2Dall_goodfit(:,:,sc);
     kord=reshape(kLow_2Dall(:,:,sc),info.ImageSize);
     niftiwrite(kord,fullfile(kordFiles(sc).folder,[adjstr, kordFiles(sc).name]),info);
-    
+
     % Calculate area under the curve (AUC)
     temp=zeros(info.ImageSize(1:3));
     auc(:,sc)=mean(mB_kLow_2Dall_goodfit(:,AUC_range,sc),2);
@@ -65,46 +84,10 @@ for sc=1:N_kord
     info=niftiinfo(dat.ROIs.mask{1});
     info.Datatype='single';
     info.BitsPerPixel=16;
-    
+
     % Save niftis
     niftiwrite(single(aucMap(:,:,:,sc)),fullfile(kordFiles(sc).folder,['auc_',adjstr, kordFiles(sc).name]),info);
-    
+
 
 end
 save(fullfile(KORDfolder,'AUCmap'),'aucMap');
-
-
-% % PLOT THE AUC over a threshold 
-% template=niftiread(dat.ROIs.mask{1});
-% AUC_threshold=4;
-% 
-% % Plot each scan
-% for sc=1:N_kord
-%     aucSignif{sc}=goodFitIndex(find(abs(auc(:,sc)>AUC_threshold)));
-%     mask=zeros(info.ImageSize);
-%     mask(aucSignif{sc})=1;
-%     figure;
-%     for i=3:15 % the slices that are not empty
-%         subplot(4,4,i);
-%         image(100*cat(3,template(:,:,i)',template(:,:,i)',template(:,:,i)')); hold on;
-%         im=imagesc(aucMap(:,:,i,sc)');
-%         axis xy; caxis([-5 5])
-%         im.AlphaData=mask(:,:,i)';
-%     end
-% end
-% 
-% % Plot the mean AUC of selected scans
-% selectedScans=[1 3 4 6:12];
-% av=mean(aucMap(:,:,:,selectedScans),4); 
-% avSignif=zeros(info.ImageSize(1:3));
-% avSignif(abs(av)>AUC_threshold)=1;
-% figure;
-% for i=3:15 % the slices that are not empty
-%     subplot(4,4,i);
-%     image(100*cat(3,template(:,:,i)',template(:,:,i)',template(:,:,i)')); hold on;
-%     im=imagesc(av(:,:,i)');
-%     axis xy; caxis([-5 5])
-%     im.AlphaData=avSignif(:,:,i)';
-% end
-% print(fullfile(KORDfolder,'AUCmap'),'-dpdf','-fillpage')
-
