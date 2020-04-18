@@ -124,6 +124,13 @@ statsFile='/Users/gkeliris/Documents/DATA/Lore_KORD/Zscore_smth3_95_80-100/Highc
 zScoreTcFilesHigh=dir([processedDataPath,'/KORD/HIGH_CONC/z_adj_zscr_mSmth_twu*.nii']);
 zScoreTcFilesLow=dir([processedDataPath,'/KORD/LOW_CONC/z_adj_zscr_mSmth_twu*.nii']);
 
+rawTcFilesHigh=dir([processedDataPath,'/KORD/HIGH_CONC/zscr_mSmth_twu*.nii']);
+rawTcFilesLow=dir([processedDataPath,'/KORD/LOW_CONC/zscr_mSmth_twu*.nii']);
+
+rawTcFilesSham=dir([processedDataPath,'/SHAM/LOW_CONC/zscr_mSmth_twu*.nii']);
+fitTcFilesSham=dir([processedDataPath,'/SHAM/LOW_CONC/poly1_exp2_fit_mean_sham.nii']);
+
+
 %% Define the data structure
 dat=KORD_datapaths(rawdatapath,0);
 
@@ -133,7 +140,7 @@ ROIstat=gk_getROIdata(statsFile,ROIs_cell);
 ROI_names=fields(ROIstat)
 ROIs_to_plot={ROI_names{5}, ROI_names{20}, ROI_names{12}, ROI_names{19}};
 
-%% Iterate over subject files and get the data for each ROI
+%% Iterate over subject files and get the ZSCORE ADJUSTED data for each ROI
 for i=1:numel(zScoreTcFilesHigh)
     zTCH_data(i)=gk_getROIdata(fullfile(zScoreTcFilesHigh(i).folder,zScoreTcFilesHigh(i).name),ROIs_cell);
 end
@@ -141,6 +148,21 @@ end
 for i=1:numel(zScoreTcFilesLow)
     zTCL_data(i)=gk_getROIdata(fullfile(zScoreTcFilesLow(i).folder,zScoreTcFilesLow(i).name),ROIs_cell);
 end
+
+%% Iterate over subject files and get the ZSCORE NON-ADJ data for each ROI
+for i=1:numel(rawTcFilesHigh)
+    rTCH_data(i)=gk_getROIdata(fullfile(rawTcFilesHigh(i).folder,rawTcFilesHigh(i).name),ROIs_cell);
+end
+
+for i=1:numel(rawTcFilesLow)
+    rTCL_data(i)=gk_getROIdata(fullfile(rawTcFilesLow(i).folder,rawTcFilesLow(i).name),ROIs_cell);
+end
+
+for i=1:numel(rawTcFilesSham)
+    shTCL_data(i)=gk_getROIdata(fullfile(rawTcFilesSham(i).folder,rawTcFilesSham(i).name),ROIs_cell);
+end
+fitTCL_data=gk_getROIdata(fullfile(fitTcFilesSham.folder,fitTcFilesSham.name),ROIs_cell);
+
 
 %% Iterate over ROIs to plot and get the relevant data
 % INFO: We check if the ROI is positive or negative on average and get the
@@ -164,10 +186,32 @@ for ri=1:numel(ROIs_to_plot)
     end
 end
 
+% AND do the same for the non-adjusted data
+for ri=1:numel(ROIs_to_plot)
+    roiSign=sign(nanmean(ROIstat.(ROIs_to_plot{ri})));
+    [~,maxind]=nanmax(roiSign*ROIstat.(ROIs_to_plot{ri}));
+    for i=1:numel(rawTcFilesHigh)
+        mrTCH(i,:,ri)=rTCH_data(i).(ROIs_to_plot{ri})(maxind,:);
+    end
+    for i=1:numel(rawTcFilesLow)
+        mrTCL(i,:,ri)=rTCL_data(i).(ROIs_to_plot{ri})(maxind,:);
+    end
+    for i=1:numel(rawTcFilesSham)
+        mshTCL(i,:,ri)=shTCL_data(i).(ROIs_to_plot{ri})(maxind,:);
+    end
+    mFitTCL(1,:,ri)=fitTCL_data.(ROIs_to_plot{ri})(maxind,:);
+    if writeCSV
+        dlmwrite(fullfile(processedDataPath,[ROIs_to_plot{ri},'_High_nonAdj.csv']),mrTCH(:,:,ri),'delimiter','\t')
+        dlmwrite(fullfile(processedDataPath,[ROIs_to_plot{ri},'_Low_nonAdj.csv']),mrTCL(:,:,ri),'delimiter','\t')
+        dlmwrite(fullfile(processedDataPath,[ROIs_to_plot{ri},'_Sham_nonAdj.csv']),mshTCL(:,:,ri),'delimiter','\t')
+    end
+end
+
+
 %% Iterate over ROIs to plot and plot he mean plus SEM
 figure; 
 for ri=1:numel(ROIs_to_plot)
-    subplot(2,2,ri); hold on;
+    subplot(4,2,2*floor(ri/3)+ri+2); hold on;
     
     % LOW CONCENTRATION
     mL=mean(mTCL([1 3:12],:,ri));
@@ -181,4 +225,54 @@ for ri=1:numel(ROIs_to_plot)
     plot(0.5:0.5:60,mean(mTCH(:,:,ri)),'b','LineWidth',3);
     
     ylim([-20 20]);
+    
+    subplot(4,2,2*floor(ri/3)+ri); hold on;
+    % SHAM
+    mshL=mean(double(mshTCL([1 2 4 6],:,ri)));
+    semshL=std(double(mshTCL([1 2 4 6],:,ri)),1,1)/sqrt(size(mshTCL([1 2 4 6],:,ri),1));
+    %errorbar(0.5:0.5:60,mshL,semshL,'k','LineWidth',0.5);
+    plot(0.5:0.5:60,mean(mshTCL([1 2 4 6],:,ri)),'color',[0.5 0.5 0.5],'LineWidth',2);
+    plot(0.5:0.5:60,mFitTCL(:,:,ri),'k--','LineWidth',2.5);
+    
+    % LOW CONCENTRATION
+    mrL=mean(double(mrTCL([1 3:12],:,ri)));
+    semrL=std(double(mrTCL([1 3:12],:,ri)),1,1)/sqrt(size(mrTCL([1 3:12],:,ri),1));
+    errorbar(0.5:0.5:60,mrL,semrL,'m','LineWidth',0.5);
+    plot(0.5:0.5:60,mean(mrTCL([1 3:12],:,ri)),'m','LineWidth',3);
+    % HIGH CONCENTRATION
+    mrH=mean(double(mrTCH(:,:,ri)));
+    semrH=std(double(mrTCH(:,:,ri)),1,1)/sqrt(size(mrTCH,1));
+    errorbar(0.5:0.5:60,mrH,semrH,'b','LineWidth',0.5);
+    plot(0.5:0.5:60,mean(mrTCH(:,:,ri)),'b','LineWidth',3);
+
+    
+    ylim([-30 5]);
+    
+end
+
+% and the same for the non-adj data
+figure; hold on;
+for ri=1:numel(ROIs_to_plot)
+    subplot(2,2,ri); hold on;
+    
+    % SHAM
+    mshL=mean(double(mshTCL([1 2 4 6],:,ri)));
+    semshL=std(double(mshTCL([1 2 4 6],:,ri)),1,1)/sqrt(size(mshTCL([1 2 4 6],:,ri),1));
+    %errorbar(0.5:0.5:60,mshL,semshL,'k','LineWidth',0.5);
+    plot(0.5:0.5:60,mean(mshTCL([1 2 4 6],:,ri)),'color',[0.5 0.5 0.5],'LineWidth',2);
+    plot(0.5:0.5:60,mFitTCL(:,:,ri),'k--','LineWidth',2.5);
+    
+    % LOW CONCENTRATION
+    mrL=mean(double(mrTCL([1 3:12],:,ri)));
+    semrL=std(double(mrTCL([1 3:12],:,ri)),1,1)/sqrt(size(mrTCL([1 3:12],:,ri),1));
+    errorbar(0.5:0.5:60,mrL,semrL,'m','LineWidth',0.5);
+    plot(0.5:0.5:60,mean(mrTCL([1 3:12],:,ri)),'m','LineWidth',3);
+    % HIGH CONCENTRATION
+    mrH=mean(double(mrTCH(:,:,ri)));
+    semrH=std(double(mrTCH(:,:,ri)),1,1)/sqrt(size(mrTCH,1));
+    errorbar(0.5:0.5:60,mrH,semrH,'b','LineWidth',0.5);
+    plot(0.5:0.5:60,mean(mrTCH(:,:,ri)),'b','LineWidth',3);
+
+    
+    ylim([-30 5]);
 end

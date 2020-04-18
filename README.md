@@ -1,2 +1,2 @@
-# gakMrUtils
+# gkMrUtils
 MRI Utilities
